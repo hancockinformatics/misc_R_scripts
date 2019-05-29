@@ -143,7 +143,7 @@ for (row in 1:nrow(merge_table)){
 ```
 
 
-5. MultiQC
+6. MultiQC
 ```{r multiqc}
 cmd = paste0("multiqc ", myDir, ".")
 write(cmd, cmdsfile, append=TRUE)
