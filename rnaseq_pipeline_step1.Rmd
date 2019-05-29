@@ -1,0 +1,152 @@
+---
+title: "RNASeq Pipeline"
+author: "Bhav Dhillon"
+date: "January 29, 2019"
+output: html_document
+---
+
+This RMarkdown file sets up a bash script file that can be executed to run the first few steps of the RNA seq pipeline as outlined below.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+library(tidyverse)
+library(janitor)
+
+
+################
+# Please specify input/output directories
+################
+
+myDir <- "/mnt/data/appendicitis/20181120/"
+
+#Create all necessary output directories
+fastqDir <- paste0(myDir, "fastq")
+if (dir.exists(fastqDir)==FALSE){
+  dir.create(fastqDir)
+}
+
+qcDir <- paste0(myDir, "fastqc")
+if (dir.exists(qcDir)==FALSE){
+  dir.create(qcDir)
+}
+
+qrtDir <- paste0(myDir, "qorts")
+if (dir.exists(qrtDir)==FALSE){
+  dir.create(qrtDir)
+}
+
+stDir <- paste0(myDir, "STAR")
+if (dir.exists(stDir)==FALSE){
+  dir.create(stDir)
+}
+
+ctDir <- paste0(myDir, "counts")
+if (dir.exists(ctDir)==FALSE){
+  dir.create(ctDir)
+}
+
+scDir <- paste0(myDir, "scripts")
+if (dir.exists(scDir)==FALSE){
+  dir.create(scDir)
+}
+
+cmdsfile <- (paste0(scDir, "/rnaseq_qc_commands.sh")) 
+
+#########
+# Setup reference genome 
+#########
+
+refDir = "/mnt/data/reference_genomes/Homo_sapiens_GRCh38"
+ref_index = paste0(refDir, "/STAR_index")
+gtfDir = paste0(refDir, "/gtf")
+gtffile <- paste0(gtfDir, "/Homo_sapiens.GRCh38.92.gtf")
+
+
+################
+# Please specify meta-data files here and edit column names in commands below as necessary
+################
+
+# Sample submission sheet
+ssfile <- read_csv(paste0(myDir, "SampleSubmissionLibrary_Oct2018_RF-P6-18.csv"), col_names = TRUE) %>% clean_names
+
+# ID file
+idfile <- read_csv(paste0(myDir, "sample_selection/RNA-seqSubmissionForm_Appendicitis_20180716.csv"), col_names=TRUE) %>% clean_names
+
+ss_subset <- dplyr::select(ssfile, sample_name, sample_id, lane)
+id_subset <- mutate(idfile, sample_name=as.character(unique_id)) %>%
+  dplyr::select(sample_name, treatment_control_or_treatment_type) 
+id_subset <- left_join(id_subset, ss_subset, by="sample_name") %>% drop_na
+merge_table <- spread(id_subset, lane, sample_id) %>% mutate(conc_bam=paste0(sample_name,"Aligned.sortedByCoord.Merged.out.bam"))
+
+```
+
+
+1. FastQC
+```{r fastqc}
+cmd = paste("fastqc ", fastqDir, "*.fastq.gz --outdir ", qcDir, " --threads 8 >> ", qcDir, "/fastqc.output", sep="")
+write(cmd, file=cmdsfile, append=TRUE)
+```
+
+
+2. STAR Alignment
+```{r star}
+for (row in 1:nrow(id_subset)){
+   cmd = paste0("STAR --runThreadN 2 --runMode alignReads --genomeDir ", ref_index, " --readFilesCommand gunzip -c --readFilesIn ", qnap2Dir, id_subset[row,"sample_id"], ".fastq.gz --outFileNamePrefix ", stDir, "/",  id_subset[row,"sample_id"], " --outSAMtype BAM SortedByCoordinate" )
+   write(cmd, file=cmdsfile, append=TRUE)
+}
+
+```
+
+
+3. QoRTS QC
+```{r qorts}
+for (row in 1:nrow(id_subset)){
+  cmd = paste0("java -jar -Xmx20000M /home/bhav/programs/QoRTs.jar QC --generatePlots --stranded --singleEnded ", stDir, "/", id_subset[row,"sample_id"], "Aligned.sortedByCoord.out.bam ", gtffile, " ", qrtDir, "/", id_subset[row,"sample_id"])
+  write(cmd, file=cmdsfile, append=TRUE)
+}
+
+## Use QoRTS plot script from Travis (thanks!)
+source("/home/bhav/hancockinformatics/misc_R_scripts/genebody_plotly.R")
+tr_genebody_plotly("/mnt/data/appendicitis/20181120/qorts/")
+
+```
+
+
+4. Merge STAR Alignments for each sample
+```{r merge_star}
+
+########################
+# This code assumes 4 bam files will be merged into 1, please edit as necessary
+# Also removes unnecessary intermediate files
+########################
+
+for (row in 1:nrow(merge_table)){
+  cmd = paste0("samtools merge -rcf -O BAM --threads 3 ", stDir, "/", merge_table[row, "conc_bam"], " ", stDir, "/" , merge_table[row,"1"], "Aligned.sortedByCoord.out.bam " , " ", stDir, "/" , merge_table[row,"2"], "Aligned.sortedByCoord.out.bam ", " ", stDir, "/" , merge_table[row,"3"], "Aligned.sortedByCoord.out.bam ", " ", stDir, "/" , merge_table[row,"4"], "Aligned.sortedByCoord.out.bam ")
+  write(cmd, file=cmdsfile, append=TRUE)
+}
+cmd = paste0("rm ", stDir,"/*Aligned.sortedByCoord.out.bam" )
+write(cmd, file=cmdsfile, append=TRUE)
+
+
+```
+
+
+5. HTSeq counts
+```{r htseq}
+for (row in 1:nrow(merge_table)){
+  ctfile <- paste0(ctDir, "/", merge_table[row,"sample_name"],".count")
+  cmd = paste0("/home/bhav/anaconda3/bin/htseq-count -s reverse -a 10 -f bam -r pos ", stDir, "/", merge_table[row,"sample_name"], "Aligned.sortedByCoord.Merged.out.bam ", gtffile, " > ", ctfile)
+  write(cmd, file=cmdsfile, append=TRUE)
+}
+```
+
+
+5. MultiQC
+```{r multiqc}
+cmd = paste0("multiqc ", myDir, ".")
+write(cmd, cmdsfile, append=TRUE)
+```
+
+
