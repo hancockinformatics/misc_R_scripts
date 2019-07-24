@@ -19,7 +19,7 @@ biomart_table[biomart_table == ""] <- NA
 biomart_table <- biomart_table %>%
   distinct(ensembl_gene_id, .keep_all = T)
 
-cat("\nSave output...\n")
+cat("\nSaving output to home directory...\n")
 
 saveRDS(biomart_table, file = paste0("~/biomart_table_", todays_date, ".rds"))
 
