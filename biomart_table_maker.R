@@ -16,6 +16,8 @@ biomart_table <- getBM(
 )
 biomart_table[biomart_table == ""] <- NA
 
+biomart_table <- biomart_table %>%
+  distinct(ensembl_gene_id, .keep_all = T)
 
 cat("\nSave output...\n")
 
