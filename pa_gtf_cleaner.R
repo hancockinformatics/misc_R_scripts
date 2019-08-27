@@ -40,7 +40,7 @@ pa_gtf_cleaner <- function(gtf_file) {
       name = str_replace(name, pattern = ' name "(.*)"', replacement = "\\1")
     ) %>%
     separate(name, into = c("name", "description"), sep = " ,", fill = "left") %>%
-    # Set name to be equal to locus tag if name is NA
+    # Set name to be equal to locus tag if name is NA. Needs to be AFTER the separate() call
     mutate(name = case_when(is.na(name) ~ locus_tag, TRUE ~ name))
 
   # Explicit return
