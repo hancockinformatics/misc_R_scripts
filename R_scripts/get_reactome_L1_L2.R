@@ -86,8 +86,6 @@ pathway_categories_l1_2 <- enr_pathway_high_level %>%
   distinct(id, .keep_all = TRUE)
 
 
-
-
 # Save the results --------------------------------------------------------
 
 # saveRDS(pathway_categories_l1_2, "reactome_categories_HSA_L1_L2.Rds")
