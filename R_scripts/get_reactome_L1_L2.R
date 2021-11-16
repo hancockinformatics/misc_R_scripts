@@ -79,13 +79,22 @@ for (row in 1:nrow(full_hierarchy)) {
 
 # Add descriptions --------------------------------------------------------
 
-pathway_categories_l1_2 <- enr_pathway_high_level %>%
+pathway_categories <-
+  enr_pathway_high_level %>%
+  left_join(., rename(all_pathways, "level_1" = description), by = c(level_1_id = "pathway_id")) %>%
+  left_join(., all_pathways, by = "pathway_id") %>%
+  select(pathway_id, "pathway_description" = description, level_1) %>%
+  distinct(pathway_id, .keep_all = TRUE)
+
+pathway_categories_L1_L2 <- enr_pathway_high_level %>%
   left_join(., rename(all_pathways, "level_1" = description), by = c(level_1_id = "pathway_id")) %>%
   left_join(., rename(all_pathways, "level_2" = description), by = c(level_2_id = "pathway_id")) %>%
-  select("id" = pathway_id, level_2, level_1) %>%
+  left_join(., all_pathways, by = "pathway_id") %>%
+  select("id" = pathway_id, description, level_1, level_2) %>%
   distinct(id, .keep_all = TRUE)
 
 
 # Save the results --------------------------------------------------------
 
-# saveRDS(pathway_categories_l1_2, "reactome_categories_HSA_L1_L2.Rds")
+# saveRDS(pathway_categories, "reactome_categories_HSA.Rds")
+# saveRDS(pathway_categories_L1_L2, "reactome_categories_HSA_L1_L2.Rds")
